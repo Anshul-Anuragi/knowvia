@@ -5,7 +5,7 @@ FROM python:3.11-slim AS builder
 
 WORKDIR /app
 
-# Install system build dependencies for C-extensions (psycopg2, etc.)
+# Install system build dependencies for C-extensions (psycopg2, libpq, etc.)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libpq-dev \
@@ -44,16 +44,19 @@ ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
 ENV ENVIRONMENT=production
 
-# Create dedicated non-root security user
+# Create dedicated non-root security user with real home directory
 RUN addgroup --system --gid 1001 appgroup && \
-    adduser --system --uid 1001 --gid 1001 appuser
+    adduser --system --uid 1001 --gid 1001 --home /home/appuser --create-home appuser
+
+ENV HOME=/home/appuser
+ENV HF_HOME=/home/appuser/.cache/huggingface
 
 # Copy application source code and migrations
 COPY . /app
 
 # Ensure directories exist and are owned by appuser
-RUN mkdir -p /app/uploads /app/reports /app/research_notes && \
-    chown -R appuser:appgroup /app
+RUN mkdir -p /app/uploads /app/reports /app/research_notes /home/appuser/.cache && \
+    chown -R appuser:appgroup /app /home/appuser
 
 USER appuser
 

@@ -5,6 +5,7 @@ gunicorn
 sqlalchemy
 alembic
 psycopg2-binary
+psycopg[binary]
 
 pydantic
 pydantic-settings
