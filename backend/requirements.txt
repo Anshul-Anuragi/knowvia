@@ -16,7 +16,6 @@ python-multipart
 
 fastembed
 sentence-transformers
-torch
 
 pinecone
 google-generativeai
