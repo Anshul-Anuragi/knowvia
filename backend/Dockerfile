@@ -60,11 +60,11 @@ RUN mkdir -p /app/uploads /app/reports /app/research_notes /home/appuser/.cache 
 
 USER appuser
 
-EXPOSE 8000
+EXPOSE 8000 10000
 
-# Health check
+# Health check (dynamically uses PORT if provided by cloud platforms like Render)
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-  CMD curl -f http://localhost:8000/healthz || exit 1
+  CMD curl -f http://localhost:${PORT:-8000}/healthz || exit 1
 
-# Run with Gunicorn process manager and Uvicorn workers (respects Render's WEB_CONCURRENCY)
-CMD ["sh", "-c", "exec gunicorn src.main:app -w ${WEB_CONCURRENCY:-2} -k uvicorn.workers.UvicornWorker -b 0.0.0.0:8000 --access-logfile - --error-logfile -"]
+# Run with Gunicorn process manager and Uvicorn workers (dynamically binds to Render's $PORT or 8000)
+CMD ["sh", "-c", "exec gunicorn src.main:app -w ${WEB_CONCURRENCY:-2} -k uvicorn.workers.UvicornWorker -b 0.0.0.0:${PORT:-8000} --access-logfile - --error-logfile -"]

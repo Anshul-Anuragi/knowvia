@@ -9,6 +9,7 @@ psycopg[binary]
 
 pydantic
 pydantic-settings
+email-validator
 
 python-jose[cryptography]
 passlib[bcrypt]
