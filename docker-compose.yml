@@ -1,0 +1,83 @@
+version: "3.8"
+
+services:
+  # ==========================================
+  # Redis L1 Fast Cache Service
+  # ==========================================
+  redis:
+    image: redis:7-alpine
+    container_name: knowvia-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - knowvia-network
+
+  # ==========================================
+  # FastAPI Enterprise RAG Backend
+  # ==========================================
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: knowvia-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - SECRET_KEY=${SECRET_KEY}
+      - PINECONE_API_KEY=${PINECONE_API_KEY}
+      - PINECONE_INDEX_NAME=${PINECONE_INDEX_NAME:-knowvia-rag}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.5-flash}
+      - TAVILY_API_KEY=${TAVILY_API_KEY}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+      - ENVIRONMENT=production
+      - DEBUG=False
+      - ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000,${ALLOWED_ORIGINS:-https://app.knowvia.com}
+    volumes:
+      - backend_uploads:/app/uploads
+      - backend_reports:/app/reports
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - knowvia-network
+
+  # ==========================================
+  # Next.js 14 Standalone Frontend
+  # ==========================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+    container_name: knowvia-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+    depends_on:
+      - backend
+    networks:
+      - knowvia-network
+
+volumes:
+  redis_data:
+  backend_uploads:
+  backend_reports:
+
+networks:
+  knowvia-network:
+    driver: bridge

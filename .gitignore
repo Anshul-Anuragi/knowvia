@@ -1,0 +1,61 @@
+# ==========================================
+# Knowvia AI - Root Git Ignore Rules
+# ==========================================
+
+# Environment variables & secrets (CRITICAL)
+.env
+.env.*
+*.env
+atlas-credentials.env
+!.env.example
+!backend/.env.example
+!frontend/.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+env/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Node & Next.js
+node_modules/
+.next/
+out/
+build/
+.yarn/
+*.tsbuildinfo
+next-env.d.ts
+
+# Uploads & Generated files
+uploads/*
+!uploads/.gitkeep
+backend/uploads/*
+!backend/uploads/.gitkeep
+reports/*
+!reports/.gitkeep
+backend/reports/*
+!backend/reports/.gitkeep
+research_notes/*
+!research_notes/.gitkeep
+backend/research_notes/*
+!backend/research_notes/.gitkeep
+
+# Databases & local logs
+*.log
+*.db
+*.sqlite3
+
+# OS & IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.pem

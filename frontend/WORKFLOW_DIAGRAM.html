@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Knowvia AI - Interactive Workflow & System Design Diagram</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    body { font-family: 'Inter', sans-serif; background: #060919; color: #e2e8f0; overflow: hidden; }
+    .mono { font-family: 'JetBrains Mono', monospace; }
+    .panel { background: #0b1026; border: 1px solid rgba(255,255,255,0.08); backdrop-filter: blur(12px); }
+    .node { cursor: pointer; transition: filter 0.2s; }
+    .node:hover { filter: brightness(1.15); }
+    .node:active { filter: brightness(1.25); }
+    .edge { stroke: #475569; stroke-width: 1.5; fill: none; transition: stroke 0.2s; }
+    .edge:hover { stroke: #818cf8; stroke-width: 2; }
+    .edge.active { stroke: #22d3ee; stroke-width: 2.5; filter: drop-shadow(0 0 6px rgba(34,211,238,0.4)); }
+    .lbl { font-size: 11px; font-weight: 600; pointer-events: none; user-select: none; }
+    .badge { font-size: 10px; font-weight: 700; letter-spacing: 0.05em; }
+    .scroll-pane::-webkit-scrollbar { width: 6px; }
+    .scroll-pane::-webkit-scrollbar-track { background: #0b1026; }
+    .scroll-pane::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+    .scroll-pane::-webkit-scrollbar-thumb:hover { background: #475569; }
+    .tooltip { position: absolute; pointer-events: none; z-index: 50; }
+    #canvas { cursor: grab; }
+    #canvas:active { cursor: grabbing; }
+
+    @media print {
+      @page { size: landscape; margin: 0.25in; }
+      html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+      body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+      header, #summary-bar, #detail-panel, #print-controls { display: none !important; }
+      #stage { position: fixed; inset: 0; width: 100%; height: 100%; overflow: hidden; }
+      #canvas { width: 100%; height: 100%; }
+    }
+  </style>
+</head>
+<body class="h-screen w-screen flex flex-col">
+
+  <!-- Header -->
+  <header class="h-16 border-b border-white/10 bg-[#0b1026]/80 backdrop-blur-md flex items-center justify-between px-6 z-40">
+    <div class="flex items-center gap-3">
+      <div class="w-8 h-8 rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-violet-500 flex items-center justify-center text-white shadow-lg shadow-indigo-500/25">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.338l-.548-.547z"/></svg>
+      </div>
+      <div>
+        <div class="text-sm font-bold text-white tracking-tight">Knowvia AI</div>
+        <div class="text-[10px] text-slate-400 font-mono uppercase tracking-wider">Enterprise RAG Workflow & System Design</div>
+      </div>
+    </div>
+    <div class="flex items-center gap-3 text-xs text-slate-400 font-mono">
+      <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Backend: 127.0.0.1:8000</span>
+      <span>•</span>
+      <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-cyan-400"></span> Next.js 14 Frontend</span>
+      <button id="export-pdf" class="px-3 py-2 rounded-lg bg-indigo-600 text-white font-semibold hover:bg-indigo-500 transition-colors">Export PDF</button>
+    </div>
+  </header>
+
+  <!-- Canvas Area -->
+  <div class="flex-1 relative overflow-hidden" id="stage">
+    <svg id="canvas" class="w-full h-full" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#64748b" />
+        </marker>
+        <marker id="arrowhead-active" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#22d3ee" />
+        </marker>
+        <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+          <feGaussianBlur stdDeviation="3" result="blur" />
+          <feComposite in="SourceGraphic" in2="blur" operator="over" />
+        </filter>
+      </defs>
+
+      <!-- Edges drawn first (behind nodes) -->
+      <g id="edges"></g>
+
+      <!-- Nodes -->
+      <g id="nodes"></g>
+    </svg>
+
+    <!-- Pan/Zoom hint -->
+    <div id="print-controls" class="absolute bottom-4 right-4 z-30 bg-[#0b1026]/90 border border-white/10 rounded-xl p-3 shadow-2xl backdrop-blur-sm">
+      <div class="text-[10px] uppercase font-bold tracking-wider text-slate-400 mb-1">Controls</div>
+      <div class="space-y-1 text-xs text-slate-300 font-mono">
+        <div><kbd class="bg-white/5 border border-white/10 px-1 py-0.5 rounded">Scroll</kbd> Zoom</div>
+        <div><kbd class="bg-white/5 border border-white/10 px-1 py-0.5 rounded">Drag</kbd> Pan</div>
+        <div><kbd class="bg-white/5 border border-white/10 px-1 py-0.5 rounded">Click Node</kbd> Details</div>
+        <div><kbd class="bg-white/5 border border-white/10 px-1 py-0.5 rounded">R</kbd> Reset View</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right Detail Panel -->
+  <aside id="detail-panel" class="hidden absolute top-16 right-0 bottom-0 w-96 max-w-[min(24rem,100vw)] border-l border-white/10 bg-[#0b1026]/95 backdrop-blur-2xl flex flex-col z-40 shadow-2xl transition-transform duration-300">
+    <div class="p-4 border-b border-white/10 flex items-center justify-between">
+      <h3 class="text-sm font-bold text-white flex items-center gap-2">
+        <span class="w-2 h-2 rounded-full bg-indigo-500"></span>
+        <span id="panel-title">Component Details</span>
+      </h3>
+      <button id="close-panel" class="p-1 hover:bg-white/5 rounded text-slate-400 hover:text-white">&times;</button>
+    </div>
+    <div class="flex-1 overflow-y-auto p-4 space-y-4">
+      <div id="panel-desc" class="text-sm text-slate-300 leading-relaxed"></div>
+      <div id="panel-endpoints" class="space-y-2"></div>
+      <div id="panel-stack" class="pt-2 border-t border-white/5 space-y-1">
+        <div class="text-[10px] uppercase font-bold tracking-wider text-slate-500 mb-1">Stack / Tech</div>
+        <div id="panel-tech" class="flex flex-wrap gap-1.5"></div>
+      </div>
+      <div id="panel-flow" class="pt-2 border-t border-white/5 space-y-1">
+        <div class="text-[10px] uppercase font-bold tracking-wider text-slate-500 mb-1">Data Flow</div>
+        <div id="panel-flow-list" class="text-xs text-slate-400 font-mono space-y-1"></div>
+      </div>
+    </div>
+    <div class="p-3 border-t border-white/10">
+      <button id="btn-view-code" class="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 text-white text-xs font-semibold text-center shadow-lg shadow-indigo-600/20 hover:from-indigo-500 hover:to-violet-500 transition-all active:scale-95">Open Source File</button>
+    </div>
+  </aside>
+
+  <!-- Full System Design Summary (bottom collapsed) -->
+  <div id="summary-bar" class="hidden absolute bottom-4 left-1/2 -translate-x-1/2 z-40 bg-[#0b1026]/95 border border-white/10 rounded-2xl px-4 py-3 shadow-2xl backdrop-blur-xl flex items-center gap-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
+    <div class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></div>
+    <span class="text-xs text-slate-300 font-mono">Diagram loaded • <span id="node-count">0</span> components • <span id="edge-count">0</span> data flows</span>
+    <button id="toggle-summary" class="ml-auto px-2 py-1 rounded text-[10px] text-slate-400 hover:text-white border border-white/10 hover:border-white/30">System Design →</button>
+  </div>
+
+  <script>
+    /* ============ DATA MODEL ============ */
+    const NODES = [
+      // --- CLIENT LAYER ---
+      { id: "client", label: "User / Client", group: "client", x: 400, y: 120,
+        desc: "End user interacting with the Knowvia AI web application via a modern browser.",
+        tech: ["Next.js 14", "React 18", "Tailwind CSS", "TypeScript"],
+        flow: ["User submits question / uploads PDF", "Views streaming answer & sources", "Interacts with Mind Map canvas"],
+        file: "src/app/page.tsx",
+        color: "#818cf8" },
+      { id: "frontend", label: "Frontend Shell (Next.js App Router)", group: "frontend", x: 400, y: 240,
+        desc: "Single-page layout with AuthProvider + ChatProvider wrapping the 3-column workspace: LeftSidebar, Center Chat, RightValidationPanel.",
+        tech: ["Next.js App Router", "React Context", "Server Components"],
+        flow: ["AuthProvider manages JWT session", "ChatProvider manages global chat state", "Layout renders 3-column workspace"],
+        file: "src/app/layout.tsx",
+        color: "#6366f1" },
+
+      // --- LAYOUT COLUMNS ---
+      { id: "left-sidebar", label: "Left Sidebar\nConversations & Documents", group: "layout", x: 120, y: 380,
+        desc: "Conversation history, document source selector (PDF checkboxes), user profile, upgrade/settings modals.",
+        tech: ["React Context", "Tailwind", "lucide-react"],
+        flow: ["List/create/delete conversations", "Select documents for RAG scoping", "User profile & subscription tier"],
+        file: "src/components/layout/LeftSidebar.tsx",
+        color: "#a78bfa" },
+      { id: "center", label: "Center Workspace\nChat Container + Input", group: "layout", x: 400, y: 380,
+        desc: "Primary intelligence workspace. Renders streaming AI messages, research report cards, starter prompts, and the chat input dock with mode selector.",
+        tech: ["ReactMarkdown", "remark-gfm", "jspdf"],
+        flow: ["Stream tokens (12ms/word)", "Render citations [1][2]", "ResearchReportCard with tool trace & PDF export"],
+        file: "src/components/chat/ChatContainer.tsx\nsrc/components/chat/ChatInput.tsx\nsrc/components/chat/ResearchReportCard.tsx",
+        color: "#22d3ee" },
+      { id: "right-panel", label: "Right Panel\nSource Validation + Mind Map", group: "layout", x: 680, y: 380,
+        desc: "Dual-tab panel: Source Validation (extracted text chunks with sentence highlighting & confidence) and Interactive Mind Map (NotebookLM-style concept tree).",
+        tech: ["SVG Canvas", "Bezier curves", "Pan/Zoom"],
+        flow: ["Display validated source chunks", "Generate mind map from snippet/docs", "Fullscreen studio mode & PNG/PDF export"],
+        file: "src/components/layout/RightValidationPanel.tsx\nsrc/components/mindmap/MindMapCanvas.tsx",
+        color: "#34d399" },
+
+      // --- CONTEXT LAYER ---
+      { id: "auth-ctx", label: "AuthContext\n(JWT Session)", group: "context", x: 120, y: 540,
+        desc: "Manages authentication state: token in localStorage, user profile, login/register/logout, session refresh on load.",
+        tech: ["React Context API", "localStorage", "JWT Bearer"],
+        flow: ["initAuth from localStorage", "login → setToken + getMe", "logout → clear storage"],
+        file: "src/context/AuthContext.tsx",
+        color: "#c084fc" },
+      { id: "chat-ctx", label: "ChatContext\n(Global State)", group: "context", x: 400, y: 540,
+        desc: "Central state: conversations, messages, streaming answer, search mode (rag/research/deep_research), documents, mind map data, system health polling (20s).",
+        tech: ["React Context", "useReducer-like state", "setInterval polling"],
+        flow: ["sendMessage → API call", "streamTokens typewriter", "generate/expand/delete mind map", "health probe every 20s"],
+        file: "src/context/ChatContext.tsx",
+        color: "#22d3ee" },
+
+      // --- API CLIENT ---
+      { id: "api-client", label: "ApiClient\n(fetch wrapper + JWT)", group: "api", x: 680, y: 540,
+        desc: "Singleton fetch client. Attaches Authorization: Bearer <token> from localStorage. Handles JSON/FormData responses and error parsing.",
+        tech: ["fetch API", "FormData", "localStorage"],
+        flow: ["GET/POST/PUT/DELETE to backend", "Attach Bearer token", "Parse & throw on !ok"],
+        file: "src/lib/api.ts",
+        color: "#38bdf8" },
+
+      // --- BACKEND ENDPOINT GROUPS ---
+      { id: "be-users", label: "Backend: /users/*\nAuth & Profile", group: "backend", x: 120, y: 700,
+        desc: "User registration, login, profile retrieval, admin dashboard, logout.",
+        tech: ["FastAPI", "PostgreSQL / Neon", "bcrypt / JWT"],
+        flow: ["POST /users/register", "POST /users/login", "GET /users/me", "GET /users/admin"],
+        file: "api/users.py (backend)",
+        color: "#c084fc" },
+      { id: "be-conv", label: "Backend: /conversations/*\nChat History", group: "backend", x: 300, y: 700,
+        desc: "Conversation CRUD: list, create, get messages, delete.",
+        tech: ["FastAPI", "PostgreSQL"],
+        flow: ["GET /conversations/", "POST /conversations/", "GET /conversations/{id}/messages", "DELETE /conversations/{id}"],
+        file: "api/conversations.py (backend)",
+        color: "#a78bfa" },
+      { id: "be-chat", label: "Backend: /chat/ask\nRAG Q&A", group: "backend", x: 480, y: 700,
+        desc: "RAG question-answering endpoint. Vector search over document chunks, LLM synthesis with citations, returns sources with confidence scores.",
+        tech: ["FastAPI", "Gemini 1.5", "Pinecone", "FastEmbed ONNX"],
+        flow: ["POST /chat/ask", "Vector similarity search", "LLM answer + citation mapping"],
+        file: "api/chat.py (backend)",
+        color: "#22d3ee" },
+      { id: "be-docs", label: "Backend: /documents/*\nKnowledge Base", group: "backend", x: 660, y: 700,
+        desc: "PDF document management: list, upload (multipart), delete. Documents are chunked, embedded (FastEmbed), and indexed to Pinecone.",
+        tech: ["FastAPI", "Pinecone", "FastEmbed ONNX", "Supabase / AWS S3"],
+        flow: ["POST /documents/upload (PDF)", "Chunk → Embed → Index", "GET /documents/", "DELETE /documents/{id}"],
+        file: "api/documents.py (backend)",
+        color: "#34d399" },
+      { id: "be-sub", label: "Backend: /subscriptions/*\nBilling", group: "backend", x: 840, y: 700,
+        desc: "Subscription plans (Free/Pro/Max/Team/Business), user subscription status, Stripe checkout, contact sales.",
+        tech: ["FastAPI", "Stripe", "PostgreSQL"],
+        flow: ["GET /subscriptions/plans", "POST /subscriptions/checkout", "POST /subscriptions/contact-sales"],
+        file: "api/subscriptions.py (backend)",
+        color: "#f472b6" },
+      { id: "be-mindmap", label: "Backend: /mindmap/*\nMind Map Engine", group: "backend", x: 120, y: 840,
+        desc: "Concept mind map generation from documents or selected text. Two-tier cache: Redis Cloud (<2ms) + Neon DB. Supports node expansion (deepen branch).",
+        tech: ["FastAPI", "Redis Cloud", "Neon DB (Postgres)", "Gemini"],
+        flow: ["POST /mindmap/generate", "POST /mindmap/expand", "DELETE /mindmap/{id}", "Cache: redis / postgres / generated"],
+        file: "api/mindmap.py (backend)",
+        color: "#38bdf8" },
+      { id: "be-research", label: "Backend: /research/*\nLangGraph Agent", group: "backend", x: 300, y: 840,
+        desc: "LangGraph-based single-agent executive report generator. Executes tools: search_uploaded_documents, tavily_search, wikipedia, get_current_date, save_report.",
+        tech: ["LangGraph", "Tavily API", "Wikipedia API", "Gemini 1.5"],
+        flow: ["POST /research/run", "Tool execution trace", "GET /research/reports", "Download .md / .pdf"],
+        file: "api/research.py (backend)",
+        color: "#22d3ee" },
+      { id: "be-health", label: "Backend: /healthz, /readyz\nHealth Probes", group: "backend", x: 480, y: 840,
+        desc: "System health monitoring. Readiness and liveness probes polled by frontend every 20 seconds.",
+        tech: ["FastAPI", "PostgreSQL health check"],
+        flow: ["GET /readyz", "GET /healthz", "GET /"],
+        file: "api/health.py (backend)",
+        color: "#64748b" },
+
+      // --- INFRASTRUCTURE ---
+      { id: "infra-pinecone", label: "Pinecone\nVector Database", group: "infra", x: 300, y: 1000,
+        desc: "Vector store for document embeddings. Enables semantic similarity search for RAG grounding.",
+        tech: ["Pinecone", "Vector embeddings", "Cosine similarity"],
+        flow: ["Store document chunk embeddings", "Query similar chunks by question vector"],
+        color: "#00b8d9" },
+      { id: "infra-redis", label: "Redis Cloud\nMind Map Cache (<2ms)", group: "infra", x: 480, y: 1000,
+        desc: "Hot cache tier for mind map data. Sub-millisecond reads for generated concept trees.",
+        tech: ["Redis Cloud", "LRU eviction", "TTL"],
+        flow: ["Cache hit: return stored mind map", "Cache miss: generate & store"],
+        color: "#e01e5a" },
+      { id: "infra-neon", label: "Neon DB\nPostgreSQL", group: "infra", x: 660, y: 1000,
+        desc: "Serverless Postgres. Primary store for users, conversations, documents, mind maps, subscriptions. Secondary mind map cache tier.",
+        tech: ["Neon (Postgres)", "SQLAlchemy / asyncpg", "Connection pooling"],
+        flow: ["Persist users & conversations", "Store mind map documents", "Cache fallback tier"],
+        color: "#0f52ba" },
+      { id: "infra-llm", label: "Gemini 1.5\nLLM Synthesis", group: "infra", x: 840, y: 1000,
+        desc: "Google Gemini 1.5 (flash/pro) for answer synthesis, report generation, and mind map concept extraction.",
+        tech: ["Gemini 1.5", "Google Generative AI"],
+        flow: ["Synthesize RAG answers", "Generate executive reports", "Extract mind map concepts"],
+        color: "#4285f4" },
+
+      // --- CLIENT-SIDE EXPORT ---
+      { id: "client-export", label: "Client-Side Export\njsPDF + Canvas", group: "client", x: 840, y: 540,
+        desc: "Client-side PDF/Markdown export for research reports and mind maps (PNG/PDF) using jsPDF and SVG-to-canvas rendering.",
+        tech: ["jspdf", "HTML Canvas", "XMLSerializer"],
+        flow: ["Download report as .md / .pdf", "Export mind map as PNG / PDF"],
+        file: "src/components/chat/ResearchReportCard.tsx\nsrc/components/mindmap/MindMapCanvas.tsx",
+        color: "#34d399" },
+    ];
+
+    const EDGES = [
+      // Client → Frontend
+      { from: "client", to: "frontend", label: "HTTP / WebSocket" },
+      // Frontend → Layout columns
+      { from: "frontend", to: "left-sidebar", label: "renders" },
+      { from: "frontend", to: "center", label: "renders" },
+      { from: "frontend", to: "right-panel", label: "renders" },
+      // Layout → Context
+      { from: "left-sidebar", to: "chat-ctx", label: "useChat()", style: "stroke-dasharray: 4 2" },
+      { from: "center", to: "chat-ctx", label: "useChat()", style: "stroke-dasharray: 4 2" },
+      { from: "right-panel", to: "chat-ctx", label: "useChat()", style: "stroke-dasharray: 4 2" },
+      { from: "left-sidebar", to: "auth-ctx", label: "useAuth()", style: "stroke-dasharray: 4 2" },
+      // Context → ApiClient
+      { from: "auth-ctx", to: "api-client", label: "calls API", style: "stroke-dasharray: 4 2" },
+      { from: "chat-ctx", to: "api-client", label: "calls API", style: "stroke-dasharray: 4 2" },
+      // ApiClient → Backend groups
+      { from: "api-client", to: "be-users", label: "auth calls", style: "stroke-dasharray: 2 2" },
+      { from: "api-client", to: "be-conv", label: "conversation calls", style: "stroke-dasharray: 2 2" },
+      { from: "api-client", to: "be-chat", label: "RAG ask", style: "stroke-dasharray: 2 2" },
+      { from: "api-client", to: "be-docs", label: "document calls", style: "stroke-dasharray: 2 2" },
+      { from: "api-client", to: "be-sub", label: "billing calls", style: "stroke-dasharray: 2 2" },
+      { from: "api-client", to: "be-mindmap", label: "mind map calls", style: "stroke-dasharray: 2 2" },
+      { from: "api-client", to: "be-research", label: "research calls", style: "stroke-dasharray: 2 2" },
+      { from: "api-client", to: "be-health", label: "health probes", style: "stroke-dasharray: 2 2" },
+      // Backend → Infra
+      { from: "be-chat", to: "infra-pinecone", label: "vector search" },
+      { from: "be-docs", to: "infra-pinecone", label: "index embeddings" },
+      { from: "be-mindmap", to: "infra-redis", label: "cache L1" },
+      { from: "be-mindmap", to: "infra-neon", label: "cache L2 / store" },
+      { from: "be-chat", to: "infra-llm", label: "synthesize answer" },
+      { from: "be-research", to: "infra-llm", label: "generate report" },
+      { from: "be-research", to: "infra-pinecone", label: "search documents" },
+      { from: "be-users", to: "infra-neon", label: "store users" },
+      { from: "be-conv", to: "infra-neon", label: "store history" },
+      { from: "be-docs", to: "infra-neon", label: "store metadata" },
+      { from: "be-sub", to: "infra-neon", label: "store plans" },
+      // Client-side export
+      { from: "center", to: "client-export", label: "export PDF/MD" },
+      { from: "right-panel", to: "client-export", label: "export PNG/PDF" },
+    ];
+
+    /* ============ RENDERING ============ */
+    const svg = document.getElementById("canvas");
+    const edgesG = document.getElementById("edges");
+    const nodesG = document.getElementById("nodes");
+    const stage = document.getElementById("stage");
+
+    let transform = { k: 1, x: 0, y: 0 };
+    let isPanning = false;
+    let start = { x: 0, y: 0 };
+    let selectedNodeId = null;
+
+    const COLOR_MAP = {
+      client: "#cbd5e1",
+      frontend: "#6366f1",
+      layout: "#94a3b8",
+      context: "#a78bfa",
+      api: "#38bdf8",
+      backend: "#22d3ee",
+      infra: "#64748b",
+    };
+
+    function el(tag, attrs = {}, children = []) {
+      const e = document.createElementNS("http://www.w3.org/2000/svg", tag);
+      Object.entries(attrs).forEach(([k, v]) => e.setAttribute(k, v));
+      children.forEach(c => e.appendChild(typeof c === "string" ? document.createTextNode(c) : c));
+      return e;
+    }
+
+    function render() {
+      edgesG.innerHTML = "";
+      nodesG.innerHTML = "";
+
+      // Draw edges
+      EDGES.forEach(e => {
+        const n1 = NODES.find(n => n.id === e.from);
+        const n2 = NODES.find(n => n.id === e.to);
+        if (!n1 || !n2) return;
+        const x1 = n1.x * transform.k + transform.x;
+        const y1 = n1.y * transform.k + transform.y;
+        const x2 = n2.x * transform.k + transform.x;
+        const y2 = n2.y * transform.k + transform.y;
+        const active = selectedNodeId && (e.from === selectedNodeId || e.to === selectedNodeId);
+        const path = el("path", {
+          d: `M${x1},${y1} C${(x1+x2)/2},${y1} ${(x1+x2)/2},${y2} ${x2},${y2}`,
+          stroke: active ? "#22d3ee" : "#475569",
+          "stroke-width": active ? 2.5 : 1.5,
+          fill: "none",
+          "marker-end": active ? "url(#arrowhead-active)" : "url(#arrowhead)",
+          "stroke-dasharray": e.style || "",
+          opacity: active ? 1 : 0.55,
+        });
+        // label
+        const mx = (x1 + x2) / 2;
+        const my = (y1 + y2) / 2 - 6;
+        const lb = el("text", {
+          x: mx, y: my, "font-size": 9, fill: active ? "#22d3ee" : "#64748b",
+          "font-weight": 600, "font-family": "JetBrains Mono, monospace",
+          "text-anchor": "middle", "pointer-events": "none", opacity: active ? 0.9 : 0.5,
+        });
+        lb.textContent = e.label;
+        edgesG.appendChild(path);
+        edgesG.appendChild(lb);
+      });
+
+      // Draw nodes
+      NODES.forEach(n => {
+        const active = selectedNodeId === n.id;
+        const g = el("g", {
+          transform: `translate(${n.x * transform.k + transform.x},${n.y * transform.k + transform.y}) scale(${transform.k})`,
+          "class": "node",
+          "data-id": n.id,
+        });
+
+        const boxW = 210;
+        const boxH = 64;
+        const rx = 10;
+        const lineH = 14;
+
+        // Background
+        const rect = el("rect", {
+          x: -boxW/2, y: -boxH/2, width: boxW, height: boxH, rx,
+          fill: "#0b1026", stroke: active ? n.color : "#334155",
+          "stroke-width": active ? 3 : 1.5, opacity: active ? 1 : 0.92,
+          filter: active ? "url(#glow)" : "none",
+        });
+        g.appendChild(rect);
+
+        // Top accent
+        const accent = el("rect", {
+          x: -boxW/2, y: -boxH/2, width: boxW, height: 4, rx: [2,2,0,0],
+          fill: n.color, opacity: 0.9,
+        });
+        g.appendChild(accent);
+
+        // Label (multi-line)
+        const lines = n.label.split("\n");
+        lines.forEach((line, i) => {
+          const t = el("text", {
+            x: 0, y: -boxH/2 + 16 + i * lineH,
+            "font-size": 12, "font-weight": 700, fill: "#ffffff",
+            "text-anchor": "middle", "font-family": "Inter, sans-serif",
+          });
+          t.textContent = line;
+          g.appendChild(t);
+        });
+
+        // Group badge
+        const badge = el("rect", {
+          x: -boxW/2 + 8, y: boxH/2 - 18, width: 44, height: 10, rx: 4,
+          fill: n.color, opacity: 0.15,
+        });
+        g.appendChild(badge);
+        const btext = el("text", {
+          x: -boxW/2 + 30, y: boxH/2 - 10,
+          "font-size": 8, "font-weight": 700, fill: n.color,
+          "text-anchor": "middle", "font-family": "JetBrains Mono, monospace",
+        });
+        btext.textContent = n.group.toUpperCase();
+        g.appendChild(btext);
+
+        // Dot indicator
+        const dot = el("circle", {
+          cx: boxW/2 - 10, cy: -boxH/2 + 10, r: 4, fill: n.color,
+        });
+        g.appendChild(dot);
+
+        // Click handler
+        g.style.cursor = "pointer";
+        g.addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          selectNode(n.id);
+        });
+
+        nodesG.appendChild(g);
+      });
+    }
+
+    function selectNode(id) {
+      selectedNodeId = id;
+      const n = NODES.find(x => x.id === id);
+      if (!n) return;
+
+      document.getElementById("panel-title").textContent = n.label.split("\n")[0];
+      document.getElementById("panel-desc").textContent = n.desc;
+      document.getElementById("panel-endpoints").innerHTML = "";
+      document.getElementById("panel-tech").innerHTML = "";
+      document.getElementById("panel-flow-list").innerHTML = "";
+
+      if (n.file) {
+        const ep = document.createElement("div");
+        ep.className = "flex items-center gap-2 px-3 py-2 rounded bg-white/5 border border-white/10 text-xs font-mono text-cyan-300";
+        ep.innerHTML = `<span class="w-3 h-3 rounded bg-cyan-500/30"></span><span>${n.file}</span>`;
+        document.getElementById("panel-endpoints").appendChild(ep);
+      }
+
+      n.tech.forEach(t => {
+        const tag = document.createElement("span");
+        tag.className = "px-2 py-1 rounded bg-white/5 border border-white/10 text-[10px] text-slate-300 font-mono";
+        tag.textContent = t;
+        document.getElementById("panel-tech").appendChild(tag);
+      });
+
+      n.flow.forEach(f => {
+        const item = document.createElement("div");
+        item.className = "flex items-start gap-2";
+        item.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-indigo-500 mt-0.5 shrink-0"></span><span>${f}</span>`;
+        document.getElementById("panel-flow-list").appendChild(item);
+      });
+
+      const codeButton = document.getElementById("btn-view-code");
+      codeButton.disabled = !n.file;
+      codeButton.textContent = n.file ? "Open Source File" : "No Source File Listed";
+      codeButton.classList.toggle("opacity-50", !n.file);
+      codeButton.classList.toggle("cursor-not-allowed", !n.file);
+      codeButton.onclick = n.file ? () => {
+        const f = n.file.split("\n")[0];
+        alert(`Open: ${f}\n(line references in source)`);
+      } : null;
+
+      document.getElementById("detail-panel").classList.remove("hidden");
+      render();
+    }
+
+    document.getElementById("close-panel").addEventListener("click", () => {
+      selectedNodeId = null;
+      document.getElementById("detail-panel").classList.add("hidden");
+      render();
+    });
+
+    document.getElementById("stage").addEventListener("click", () => {
+      if (!selectedNodeId) return;
+      selectedNodeId = null;
+      document.getElementById("detail-panel").classList.add("hidden");
+      render();
+    });
+
+    /* ============ PAN / ZOOM ============ */
+    svg.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      const rect = svg.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+      const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
+      const newK = Math.min(2, Math.max(0.4, transform.k * zoomFactor));
+      // Zoom toward mouse
+      transform.x = mx - (mx - transform.x) * (newK / transform.k);
+      transform.y = my - (my - transform.y) * (newK / transform.k);
+      transform.k = newK;
+      render();
+    }, { passive: false });
+
+    let panStart = { x: 0, y: 0 };
+    svg.addEventListener("mousedown", (e) => {
+      if (e.target.tagName === "svg" || e.target.id === "canvas") {
+        isPanning = true;
+        panStart = { x: e.clientX - transform.x, y: e.clientY - transform.y };
+        svg.style.cursor = "grabbing";
+      }
+    });
+    window.addEventListener("mousemove", (e) => {
+      if (!isPanning) return;
+      transform.x = e.clientX - panStart.x;
+      transform.y = e.clientY - panStart.y;
+      render();
+    });
+    window.addEventListener("mouseup", () => {
+      isPanning = false;
+      svg.style.cursor = "grab";
+    });
+
+    // Reset view
+    window.addEventListener("keydown", (e) => {
+      if (e.key.toLowerCase() === "r") {
+        transform = { k: 1, x: 0, y: 0 };
+        render();
+      }
+      if (e.key === "Escape") {
+        selectedNodeId = null;
+        document.getElementById("detail-panel").classList.add("hidden");
+        render();
+      }
+    });
+
+    // Initial center
+    setTimeout(() => {
+      const rect = svg.getBoundingClientRect();
+      transform.x = rect.width / 2 - 400;
+      transform.y = rect.height / 2 - 400;
+      document.getElementById("node-count").textContent = NODES.length;
+      document.getElementById("edge-count").textContent = EDGES.length;
+      render();
+    }, 100);
+
+    // Print the complete diagram, fitted to a landscape page.
+    let printTransform = null;
+    document.getElementById("export-pdf").addEventListener("click", () => window.print());
+    window.addEventListener("beforeprint", () => {
+      printTransform = { ...transform };
+      const rect = svg.getBoundingClientRect();
+      const bounds = { minX: 15, maxX: 945, minY: 88, maxY: 1032 };
+      const padding = 24;
+      transform.k = Math.min(
+        (rect.width - padding * 2) / (bounds.maxX - bounds.minX),
+        (rect.height - padding * 2) / (bounds.maxY - bounds.minY)
+      );
+      transform.x = rect.width / 2 - ((bounds.minX + bounds.maxX) / 2) * transform.k;
+      transform.y = rect.height / 2 - ((bounds.minY + bounds.maxY) / 2) * transform.k;
+      render();
+    });
+    window.addEventListener("afterprint", () => {
+      if (printTransform) {
+        transform = printTransform;
+        printTransform = null;
+        render();
+      }
+    });
+
+    // Summary bar toggle
+    const summaryBar = document.getElementById("summary-bar");
+    const toggleSummary = document.getElementById("toggle-summary");
+    toggleSummary.addEventListener("click", () => {
+      summaryBar.classList.toggle("hidden");
+    });
+
+  </script>
+</body>
+</html>

@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual Environment
+.venv/
+venv/
+ENV/
+env/
+
+# Environment Variables & Secrets
+.env
+.env.*
+*.env
+atlas-credentials.env
+
+# Uploads, Reports & Local Data
+uploads/*
+!uploads/.gitkeep
+reports/*
+!reports/.gitkeep
+research_notes/*
+!research_notes/.gitkeep
+
+# Testing & Cache
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Editor & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Logs & Databases
+*.log
+*.db
+*.sqlite3
