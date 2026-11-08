@@ -45,8 +45,8 @@ ENV PYTHONUNBUFFERED=1
 ENV ENVIRONMENT=production
 
 # Create dedicated non-root security user with real home directory
-RUN addgroup --system --gid 1001 appgroup && \
-    adduser --system --uid 1001 --gid 1001 --home /home/appuser --create-home appuser
+RUN groupadd -g 1001 appgroup && \
+    useradd -u 1001 -g 1001 -m -d /home/appuser -s /bin/bash appuser
 
 ENV HOME=/home/appuser
 ENV HF_HOME=/home/appuser/.cache/huggingface
